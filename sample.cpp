@@ -14,6 +14,7 @@
 #include <GL/gl.h>
 #include <GL/glu.h>
 #include "glut.h"
+#include "glslprogram.h" /* C++ class to use GLSL Shaders */
 
 
 //	This is a sample OpenGL / GLUT program
