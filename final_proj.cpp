@@ -147,6 +147,11 @@ const GLfloat FOGDENSITY  = { 0.30f };
 const GLfloat FOGSTART    = { 1.5 };
 const GLfloat FOGEND      = { 4. };
 
+const float xpos_max = { 4.8 };
+const float xpos_min = { -4.8 };
+const float zpos_max = { 4.8 };
+const float zpos_min = { -4.8 };
+
 
 // what options should we compile-in?
 // in general, you don't need to worry about these
@@ -160,6 +165,7 @@ int		ActiveButton;			// current button that is down
 GLuint	AxesList;				// list to hold the axes
 int		AxesOn;					// != 0 means to draw the axes
 GLuint	BoxList;				// object display list
+GLuint	WallList;
 int		DebugOn;				// != 0 means to print debugging info
 int		DepthCueOn;				// != 0 means to use intensity depth cueing
 int		DepthBufferOn;			// != 0 means to use the z-buffer
@@ -180,9 +186,16 @@ bool sneak = 0;
 bool lookleft, lookright = 0; /* character eye movement */
 bool lookup, lookdown = 0;
 
+bool spawnlight = 0;
+
+/* Texture globals */
+GLuint Tex0, Tex1;
+int width, height;
+
+/* Shaders */
+GLSLProgram *Pattern;
 
 // function prototypes:
-
 void	Animate( );
 void	Display( );
 void	DoAxesMenu( int );
@@ -360,23 +373,63 @@ Display( )
 
 	if(walkforward)
 	{
-		xpos += walkspeed * sin(eyetheta);
-		zpos += walkspeed * cos(eyetheta);
+		if(xpos > xpos_min && xpos < xpos_max)
+			xpos += walkspeed * sin(eyetheta);
+		else if(xpos <= xpos_min)
+			xpos = xpos_min + 0.01;
+		else if(xpos >= xpos_max)
+			xpos = xpos_max - 0.01;
+		if (zpos > zpos_min && zpos < zpos_max)
+			zpos += walkspeed * cos(eyetheta);
+		else if (zpos <= zpos_min)
+			zpos = zpos_min + 0.01;
+		else if (zpos >= zpos_max)
+			zpos = zpos_max - 0.01;
 	}
 	if (walkback)
 	{
-		xpos -= walkspeed * sin(eyetheta);
-		zpos -= walkspeed * cos(eyetheta);
+		if (xpos > xpos_min && xpos < xpos_max)
+			xpos -= walkspeed * sin(eyetheta);
+		else if (xpos <= xpos_min)
+			xpos = xpos_min + 0.01;
+		else if (xpos >= xpos_max)
+			xpos = xpos_max - 0.01;
+		if (zpos > zpos_min && zpos < zpos_max)
+			zpos -= walkspeed * cos(eyetheta);
+		else if (zpos <= zpos_min)
+			zpos = zpos_min + 0.01;
+		else if (zpos >= zpos_max)
+			zpos = zpos_max - 0.01;
 	}
 	if (walkleft)
 	{
-		xpos += walkspeed * cos(eyetheta);
-		zpos -= walkspeed * sin(eyetheta);
+		if (xpos > xpos_min && xpos < xpos_max)
+			xpos += walkspeed * cos(eyetheta);
+		else if (xpos <= xpos_min)
+			xpos = xpos_min + 0.01;
+		else if (xpos >= xpos_max)
+			xpos = xpos_max - 0.01;
+		if (zpos > zpos_min && zpos < zpos_max)
+			zpos -= walkspeed * sin(eyetheta);
+		else if (zpos <= zpos_min)
+			zpos = zpos_min + 0.01;
+		else if (zpos >= zpos_max)
+			zpos = zpos_max - 0.01;
 	}
 	if (walkright)
 	{
-		xpos -= walkspeed * cos(eyetheta);
-		zpos += walkspeed * sin(eyetheta);
+		if (xpos > xpos_min && xpos < xpos_max)
+			xpos -= walkspeed * cos(eyetheta);
+		else if (xpos <= xpos_min)
+			xpos = xpos_min + 0.01;
+		else if (xpos >= xpos_max)
+			xpos = xpos_max - 0.01;
+		if (zpos > zpos_min && zpos < zpos_max)
+			zpos += walkspeed * sin(eyetheta);
+		else if (zpos <= zpos_min)
+			zpos = zpos_min + 0.01;
+		else if (zpos >= zpos_max)
+			zpos = zpos_max - 0.01;
 	}
 	
 
@@ -425,8 +478,84 @@ Display( )
 	glEnable( GL_NORMALIZE );
 
 	// draw the current object:
+	
+	if(spawnlight)
+	{
+	glPushMatrix();
+		glScalef(0.33, 0.33, 0.33);
+		glTranslatef(xeyepos, yeyepos, zeyepos);
+		glCallList( BoxList );
+	glPopMatrix();
+	}
+	glActiveTexture(GL_TEXTURE6);
+	glBindTexture(GL_TEXTURE_2D, Tex0);
+	glActiveTexture(GL_TEXTURE5);
+	glBindTexture(GL_TEXTURE_2D, Tex1);
 
-	glCallList( BoxList );
+	glPushMatrix();
+		Pattern->Use();
+		Pattern->SetUniformVariable("Color_Map", 6);
+		Pattern->SetUniformVariable("Normal_Map", 5);
+		Pattern->SetUniformVariable("EC_eyeposx", xeyepos);
+		Pattern->SetUniformVariable("EC_eyeposy", yeyepos);
+		Pattern->SetUniformVariable("EC_eyeposz", zeyepos);
+		glTranslatef(-5., -1., 5.);
+		glCallList( WallList );
+		Pattern->Use(0);
+	glPopMatrix();
+
+	glPushMatrix();
+		Pattern->Use();
+		Pattern->SetUniformVariable("Color_Map", 6);
+		Pattern->SetUniformVariable("Normal_Map", 5);
+		Pattern->SetUniformVariable("EC_eyeposx", xeyepos);
+		Pattern->SetUniformVariable("EC_eyeposy", yeyepos);
+		Pattern->SetUniformVariable("EC_eyeposz", zeyepos);
+		glTranslatef(-5., -1., -5.);
+		glCallList(WallList);
+
+		Pattern->Use(0);
+	glPopMatrix();
+
+	glPushMatrix();
+		Pattern->Use();
+		Pattern->SetUniformVariable("Color_Map", 6);
+		Pattern->SetUniformVariable("Normal_Map", 5);
+		Pattern->SetUniformVariable("EC_eyeposx", xeyepos);
+		Pattern->SetUniformVariable("EC_eyeposy", yeyepos);
+		Pattern->SetUniformVariable("EC_eyeposz", zeyepos);
+		glTranslatef(-5., -1., 5.);
+		glRotatef(90, 0., 1., 0.);
+		glCallList(WallList);
+
+		Pattern->Use(0);
+	glPopMatrix();
+	glPushMatrix();
+		Pattern->Use();
+		Pattern->SetUniformVariable("Color_Map", 6);
+		Pattern->SetUniformVariable("Normal_Map", 5);
+		Pattern->SetUniformVariable("EC_eyeposx", xeyepos);
+		Pattern->SetUniformVariable("EC_eyeposy", yeyepos);
+		Pattern->SetUniformVariable("EC_eyeposz", zeyepos);
+		glTranslatef(5., -1., 5.);
+		glRotatef(90, 0., 1., 0.);
+		glCallList(WallList);
+
+		Pattern->Use(0);
+	glPopMatrix();
+	glPushMatrix();
+		Pattern->Use();
+		Pattern->SetUniformVariable("Normal_Map", 5);
+		Pattern->SetUniformVariable("Color_Map", 6);
+		Pattern->SetUniformVariable("EC_eyeposx", xeyepos);
+		Pattern->SetUniformVariable("EC_eyeposy", yeyepos);
+		Pattern->SetUniformVariable("EC_eyeposz", zeyepos);
+		glTranslatef(-5., -1., -5.);
+		glRotatef(90, 1., 0., 0.);
+		glCallList(WallList);
+
+		Pattern->Use(0);
+	glPopMatrix();
 
 #ifdef DEMO_Z_FIGHTING
 	if( DepthFightingOn != 0 )
@@ -440,9 +569,9 @@ Display( )
 
 	// draw some gratuitous text that just rotates on top of the scene:
 
-	glDisable( GL_DEPTH_TEST );
-	glColor3f( 0., 1., 1. );
-	DoRasterString( 0., 1., 0., (char *)"Text That Moves" );
+	//glDisable( GL_DEPTH_TEST );
+	//glColor3f( 0., 1., 1. );
+	//DoRasterString( 0., 1., 0., (char *)"Text That Moves" );
 
 	// draw some gratuitous text that is fixed on the screen:
 	//
@@ -750,6 +879,7 @@ InitGraphics( )
 	glutTimerFunc( -1, NULL, 0 );
 	glutIdleFunc( Animate ); /* idle function set to Animate() */
 
+	
 	// init glew (a window must be open to do this):
 
 #ifdef WIN32
@@ -762,6 +892,44 @@ InitGraphics( )
 		fprintf( stderr, "GLEW initialized OK\n" );
 	fprintf( stderr, "Status: Using GLEW %s\n", glewGetString(GLEW_VERSION));
 #endif
+
+	/* Setting up shader */
+	Pattern = new GLSLProgram();
+	bool valid = Pattern->Create("pattern.vert", "pattern.frag");
+	if (!valid)
+	{
+		fprintf(stderr, "Shader cannot be created!\n");
+		DoMainMenu(QUIT);
+	}
+	else
+	{
+		fprintf(stderr, "Shader created.\n");
+	}
+	Pattern->SetVerbose(false);
+
+	/* Setup textures AFTER init'ing glew: */
+	width = 1024;
+	height = 1024;
+	unsigned char* texarr0 = BmpToTexture("textures/concrete.bmp", &width, &height);
+	unsigned char* texarr1 = BmpToTexture("textures/concrete_normal.bmp", &width, &height);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+	glGenTextures(1, &Tex0);
+	glGenTextures(1, &Tex1);
+
+	glBindTexture(GL_TEXTURE_2D, Tex0);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarr0);
+
+	glBindTexture(GL_TEXTURE_2D, Tex1);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarr1);
 }
 
 
@@ -822,6 +990,27 @@ InitLists( )
 
 	glEndList( );
 
+	WallList = glGenLists(1);
+	glNewList( WallList, GL_COMPILE );
+		glBegin(GL_QUADS);
+				glTexCoord2f(0., 0.);
+				glNormal3f(0., 0., -1.);
+			glVertex3f(10., 0., 0.);
+
+				glTexCoord2f(1., 0.);
+				glNormal3f(0., 0., -1.);
+			glVertex3f(0., 0., 0.);
+
+				glTexCoord2f(1., 1.);
+				glNormal3f(0., 0., -1.);
+			glVertex3f(0., 10., 0.);
+			
+				glTexCoord2f(0., 1.);
+				glNormal3f(0., 0., -1.);
+			glVertex3f(10., 10., 0.);
+		glEnd();
+	glEndList();
+
 	// create the axes:
 
 	AxesList = glGenLists( 1 );
@@ -874,6 +1063,9 @@ Keyboard( unsigned char c, int x, int y )
 		case 'l':
 		case 'L':
 			lookright = true;
+			break;
+		case ' ':
+			spawnlight = true;
 			break;
 
 		case 'o':
