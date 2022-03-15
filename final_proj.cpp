@@ -187,13 +187,26 @@ bool lookleft, lookright = 0; /* character eye movement */
 bool lookup, lookdown = 0;
 
 bool spawnlight = 0;
+bool lightexists = 0;
 
-/* Texture globals */
-GLuint Tex0, Tex1;
-int width, height;
+
 
 /* Shaders */
 GLSLProgram *Pattern;
+	GLuint Tex0, Tex1; /* Color & normal textures */
+	int width, height;
+
+GLSLProgram *Explode;
+	int exp_level = 3;
+	float exp_gravity = -0.01;
+	float exp_time = (-5.);
+	const float exp_time2 = 0;
+	float exp_velscale = 20.;
+	
+
+/* osusphere */
+int		NumLngs, NumLats;
+struct point* Pts;
 
 // function prototypes:
 void	Animate( );
@@ -230,6 +243,8 @@ short			ReadShort( FILE * );
 void			Cross(float[3], float[3], float[3]);
 float			Dot(float [3], float [3]);
 float			Unit(float [3], float [3]);
+
+void OsuSphere(float, int, int);
 
 
 // main program:
@@ -290,7 +305,10 @@ Animate( )
 	Time = (float)ms / (float)MS_IN_THE_ANIMATION_CYCLE;        // [ 0., 1. )
 
 	// force a call to Display( ) next time it is convenient:
-
+	if(lightexists)
+		exp_time += 0.001;
+	if(exp_time > 50.)
+		lightexists = false;
 	glutSetWindow( MainWindow );
 	glutPostRedisplay( );
 }
@@ -479,14 +497,34 @@ Display( )
 
 	// draw the current object:
 	
-	if(spawnlight)
-	{
 	glPushMatrix();
-		glScalef(0.33, 0.33, 0.33);
-		glTranslatef(xeyepos, yeyepos, zeyepos);
-		glCallList( BoxList );
+		static float lightposx;
+		static float lightposy;
+		static float lightposz;
+		if(spawnlight)
+		{
+			lightposx = xpos;
+			lightposy = ypos + 2;
+			lightposz = zpos;
+			spawnlight = false;
+			lightexists = true;
+		}
+		if(lightexists)
+		{
+			Explode->Use();	
+			Explode->SetUniformVariable("uLevel", exp_level);
+			Explode->SetUniformVariable("uGravity", exp_gravity);
+			if(exp_time > 0.)
+				Explode->SetUniformVariable("uTime", exp_time);
+			else
+				Explode->SetUniformVariable("uTime", exp_time2);
+			Explode->SetUniformVariable("uVelScale", exp_velscale);
+			glTranslatef(lightposx, lightposy, lightposz);
+			OsuSphere(.33, 30, 30);
+			Explode->Use(0);
+		}
 	glPopMatrix();
-	}
+
 	glActiveTexture(GL_TEXTURE6);
 	glBindTexture(GL_TEXTURE_2D, Tex0);
 	glActiveTexture(GL_TEXTURE5);
@@ -590,7 +628,7 @@ Display( )
 	glMatrixMode( GL_MODELVIEW );
 	glLoadIdentity( );
 	glColor3f( 1., 1., 1. );
-	DoRasterString( 5., 5., 0., (char *)"Text That Doesn't" );
+	DoRasterString( 5., 5., 0., (char *)"CS457 Final Proj" );
 
 	// swap the double-buffered framebuffers:
 
@@ -895,7 +933,7 @@ InitGraphics( )
 
 	/* Setting up shader */
 	Pattern = new GLSLProgram();
-	bool valid = Pattern->Create("pattern.vert", "pattern.frag");
+	bool valid = Pattern->Create("shaders/pattern.vert", "shaders/pattern.frag");
 	if (!valid)
 	{
 		fprintf(stderr, "Shader cannot be created!\n");
@@ -906,6 +944,19 @@ InitGraphics( )
 		fprintf(stderr, "Shader created.\n");
 	}
 	Pattern->SetVerbose(false);
+	
+	Explode = new GLSLProgram();
+	valid = Explode->Create("shaders/explode.vert", "shaders/explode.geom", "shaders/explode.frag");
+	if (!valid)
+	{
+		fprintf(stderr, "Shader cannot be created!\n");
+		DoMainMenu(QUIT);
+	}
+	else
+	{
+		fprintf(stderr, "Shader created.\n");
+	}
+	Explode->SetVerbose(false);
 
 	/* Setup textures AFTER init'ing glew: */
 	width = 1024;
@@ -1065,7 +1116,11 @@ Keyboard( unsigned char c, int x, int y )
 			lookright = true;
 			break;
 		case ' ':
-			spawnlight = true;
+			if(!lightexists)
+			{ 
+				spawnlight = true;
+				exp_time = -5.; //resetting our explode timer !
+			}
 			break;
 
 		case 'o':
@@ -1780,4 +1835,131 @@ Unit(float vin[3], float vout[3])
 		vout[2] = vin[2];
 	}
 	return dist;
+}
+
+struct point
+{
+	float x, y, z;		// coordinates
+	float nx, ny, nz;	// surface normal
+	float s, t;		// texture coords
+};
+
+inline
+struct point*
+	PtsPointer(int lat, int lng)
+{
+	if (lat < 0)	lat += (NumLats - 1);
+	if (lng < 0)	lng += (NumLngs - 0);
+	if (lat > NumLats - 1)	lat -= (NumLats - 1);
+	if (lng > NumLngs - 1)	lng -= (NumLngs - 0);
+	return &Pts[NumLngs * lat + lng];
+}
+
+inline
+void
+DrawPoint(struct point* p)
+{
+	glNormal3fv(&p->nx);
+	glTexCoord2fv(&p->s);
+	glVertex3fv(&p->x);
+}
+
+void
+OsuSphere(float radius, int slices, int stacks)
+{
+	// set the globals:
+
+	NumLngs = slices;
+	NumLats = stacks;
+	if (NumLngs < 3)
+		NumLngs = 3;
+	if (NumLats < 3)
+		NumLats = 3;
+
+	// allocate the point data structure:
+
+	Pts = new struct point[NumLngs * NumLats];
+
+	// fill the Pts structure:
+
+	for (int ilat = 0; ilat < NumLats; ilat++)
+	{
+		float lat = -M_PI / 2. + M_PI * (float)ilat / (float)(NumLats - 1);	// ilat=0/lat=0. is the south pole
+											// ilat=NumLats-1, lat=+M_PI/2. is the north pole
+		float xz = cosf(lat);
+		float  y = sinf(lat);
+		for (int ilng = 0; ilng < NumLngs; ilng++)				// ilng=0, lng=-M_PI and
+											// ilng=NumLngs-1, lng=+M_PI are the same meridian
+		{
+			float lng = -M_PI + 2. * M_PI * (float)ilng / (float)(NumLngs - 1);
+			float x = xz * cosf(lng);
+			float z = -xz * sinf(lng);
+			struct point* p = PtsPointer(ilat, ilng);
+			p->x = radius * x;
+			p->y = radius * y;
+			p->z = radius * z;
+			p->nx = x;
+			p->ny = y;
+			p->nz = z;
+			p->s = (lng + M_PI) / (2. * M_PI);
+			p->t = (lat + M_PI / 2.) / M_PI;
+		}
+	}
+
+	struct point top, bot;		// top, bottom points
+
+	top.x = 0.;		top.y = radius;	top.z = 0.;
+	top.nx = 0.;		top.ny = 1.;		top.nz = 0.;
+	top.s = 0.;		top.t = 1.;
+
+	bot.x = 0.;		bot.y = -radius;	bot.z = 0.;
+	bot.nx = 0.;		bot.ny = -1.;		bot.nz = 0.;
+	bot.s = 0.;		bot.t = 0.;
+
+	// connect the north pole to the latitude NumLats-2:
+
+	glBegin(GL_TRIANGLE_STRIP);
+	for (int ilng = 0; ilng < NumLngs; ilng++)
+	{
+		float lng = -M_PI + 2. * M_PI * (float)ilng / (float)(NumLngs - 1);
+		top.s = (lng + M_PI) / (2. * M_PI);
+		DrawPoint(&top);
+		struct point* p = PtsPointer(NumLats - 2, ilng);	// ilat=NumLats-1 is the north pole
+		DrawPoint(p);
+	}
+	glEnd();
+
+	// connect the south pole to the latitude 1:
+
+	glBegin(GL_TRIANGLE_STRIP);
+	for (int ilng = NumLngs - 1; ilng >= 0; ilng--)
+	{
+		float lng = -M_PI + 2. * M_PI * (float)ilng / (float)(NumLngs - 1);
+		bot.s = (lng + M_PI) / (2. * M_PI);
+		DrawPoint(&bot);
+		struct point* p = PtsPointer(1, ilng);					// ilat=0 is the south pole
+		DrawPoint(p);
+	}
+	glEnd();
+
+	// connect the horizontal strips:
+
+	for (int ilat = 2; ilat < NumLats - 1; ilat++)
+	{
+		struct point* p;
+		glBegin(GL_TRIANGLE_STRIP);
+		for (int ilng = 0; ilng < NumLngs; ilng++)
+		{
+			p = PtsPointer(ilat, ilng);
+			DrawPoint(p);
+			p = PtsPointer(ilat - 1, ilng);
+			DrawPoint(p);
+		}
+		glEnd();
+	}
+
+	// clean-up:
+
+	delete[] Pts;
+	Pts = NULL;
 }
