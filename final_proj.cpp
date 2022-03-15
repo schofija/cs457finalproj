@@ -24,6 +24,32 @@
 */
 
 
+#include <vector>
+#include <string>
+
+// delimiters for parsing the obj file:
+#define OBJDELIMS		" \t"
+
+struct Vertex
+{
+	float x, y, z;
+};
+
+struct Normal
+{
+	float nx, ny, nz;
+};
+
+struct TextureCoord
+{
+	float s, t, p;
+};
+
+struct face
+{
+	int v, n, t;
+};
+
 // title of these windows:
 
 const char *WINDOWTITLE = { "CS457 Final Project" };
@@ -41,8 +67,8 @@ const int ESCAPE = { 0x1b };
 // initial window size:
 
 const int INIT_WINDOW_SIZE = { 600 };
-const int INIT_WINDOW_WIDTH = {1280};
-const int INIT_WINDOW_HEIGHT = {720};
+const int INIT_WINDOW_WIDTH = {1920};
+const int INIT_WINDOW_HEIGHT = {1080};
 
 // size of the 3d box:
 
@@ -147,10 +173,10 @@ const GLfloat FOGDENSITY  = { 0.30f };
 const GLfloat FOGSTART    = { 1.5 };
 const GLfloat FOGEND      = { 4. };
 
-const float xpos_max = { 4.8 };
-const float xpos_min = { -4.8 };
-const float zpos_max = { 4.8 };
-const float zpos_min = { -4.8 };
+const float xpos_max = { 4.8};
+const float xpos_min = { -4.8};
+const float zpos_max = { 4.8};
+const float zpos_min = { -4.8};
 
 
 // what options should we compile-in?
@@ -166,6 +192,10 @@ GLuint	AxesList;				// list to hold the axes
 int		AxesOn;					// != 0 means to draw the axes
 GLuint	BoxList;				// object display list
 GLuint	WallList;
+GLuint	FloorList;
+
+GLuint	CowList;
+GLuint	TigerList;
 int		DebugOn;				// != 0 means to print debugging info
 int		DepthCueOn;				// != 0 means to use intensity depth cueing
 int		DepthBufferOn;			// != 0 means to use the z-buffer
@@ -186,14 +216,19 @@ bool sneak = 0;
 bool lookleft, lookright = 0; /* character eye movement */
 bool lookup, lookdown = 0;
 
+/* Disco ball light*/
 bool spawnlight = 0;
 bool lightexists = 0;
 
-
+/*Point light 1*/
+bool spawnlight1;
+bool light1exists;
+float light1_time;
 
 /* Shaders */
 GLSLProgram *Pattern;
-	GLuint Tex0, Tex1; /* Color & normal textures */
+	GLuint Tex0, Tex1, Tex2, Tex3, Tex4, Tex5; /* Color & normal textures */
+	GLuint DiscoTex, DiscoTexNormal; /*Disco ball tex*/
 	int width, height;
 
 GLSLProgram *Explode;
@@ -202,8 +237,8 @@ GLSLProgram *Explode;
 	float exp_time = (-5.);
 	const float exp_time2 = 0;
 	float exp_velscale = 20.;
+	float rotatespeed;
 	
-
 /* osusphere */
 int		NumLngs, NumLats;
 struct point* Pts;
@@ -245,6 +280,13 @@ float			Dot(float [3], float [3]);
 float			Unit(float [3], float [3]);
 
 void OsuSphere(float, int, int);
+
+void	Cross(float[3], float[3], float[3]);
+char*	ReadRestOfLine(FILE*);
+void	ReadObjVTN(char*, int*, int*, int*);
+float	Unit(float[3]);
+float	Unit(float[3], float[3]);
+int		LoadObjFile(char*);
 
 
 // main program:
@@ -307,8 +349,11 @@ Animate( )
 	// force a call to Display( ) next time it is convenient:
 	if(lightexists)
 		exp_time += 0.001;
-	if(exp_time > 50.)
+	if(exp_time > 7.5)
 		lightexists = false;
+
+	if(light1exists)
+		light1_time += 0.001;
 	glutSetWindow( MainWindow );
 	glutPostRedisplay( );
 }
@@ -339,14 +384,8 @@ Display( )
 
 	// set the viewport to a square centered in the window:
 
-	//GLsizei vx = glutGet( GLUT_WINDOW_WIDTH );
-	//GLsizei vy = glutGet( GLUT_WINDOW_HEIGHT );
-	//GLsizei v = vx < vy ? vx : vy;			// minimum dimension
-	//GLint xl = ( vx - v ) / 2;
-	//GLint yb = ( vy - v ) / 2;
-	//glViewport( xl , yb,  v, v  );
 	glutFullScreen();
-	glViewport(0, 0, 1920, 1080);
+	glViewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT);
 
 	// set the viewing volume:
 	// remember that the Z clipping  values are actually
@@ -449,19 +488,15 @@ Display( )
 		else if (zpos >= zpos_max)
 			zpos = zpos_max - 0.01;
 	}
-	
 
 	// set the eye position, look-at position, and up-vector:
-
 	gluLookAt( xpos, ypos, zpos,     xeyepos, yeyepos, zeyepos,     0., 1., 0. );
 
 	// rotate the scene:
-
 	glRotatef( (GLfloat)Yrot, 0., 1., 0. );
 	glRotatef( (GLfloat)Xrot, 1., 0., 0. );
 
 	// uniformly scale the scene:
-
 	if( Scale < MINSCALE )
 		Scale = MINSCALE;
 	glScalef( (GLfloat)Scale, (GLfloat)Scale, (GLfloat)Scale );
@@ -483,20 +518,40 @@ Display( )
 		glDisable( GL_FOG );
 	}
 
-	// possibly draw the axes:
-
-	if( AxesOn != 0 )
-	{
-		glColor3fv( &Colors[WhichColor][0] );
-		glCallList( AxesList );
-	}
-
 	// since we are using glScalef( ), be sure normals get unitized:
-
 	glEnable( GL_NORMALIZE );
 
 	// draw the current object:
-	
+
+	glActiveTexture(GL_TEXTURE6);
+	glBindTexture(GL_TEXTURE_2D, Tex0);
+	glActiveTexture(GL_TEXTURE5);
+	glBindTexture(GL_TEXTURE_2D, Tex1);
+
+	glActiveTexture(GL_TEXTURE7);
+	glBindTexture(GL_TEXTURE_2D, Tex2);
+
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, Tex3);
+
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, Tex4);
+
+	glActiveTexture(GL_TEXTURE3);
+	glBindTexture(GL_TEXTURE_2D, Tex5);
+
+	glActiveTexture(GL_TEXTURE10);
+	glBindTexture(GL_TEXTURE_2D, DiscoTex);
+	glActiveTexture(GL_TEXTURE11);
+	glBindTexture(GL_TEXTURE_2D, DiscoTexNormal);
+
+	int nmf = 0;
+	if (lightexists)
+		nmf = 30;
+	else nmf = 0;
+
+	float uPower = 5000.;
+
 	glPushMatrix();
 		static float lightposx;
 		static float lightposy;
@@ -511,90 +566,127 @@ Display( )
 		}
 		if(lightexists)
 		{
-			Explode->Use();	
-			Explode->SetUniformVariable("uLevel", exp_level);
-			Explode->SetUniformVariable("uGravity", exp_gravity);
-			if(exp_time > 0.)
-				Explode->SetUniformVariable("uTime", exp_time);
-			else
-				Explode->SetUniformVariable("uTime", exp_time2);
-			Explode->SetUniformVariable("uVelScale", exp_velscale);
-			glTranslatef(lightposx, lightposy, lightposz);
-			OsuSphere(.33, 30, 30);
-			Explode->Use(0);
+			glPushMatrix();
+				Explode->Use();	
+				Explode->SetUniformVariable("uLevel", exp_level);
+				Explode->SetUniformVariable("uGravity", exp_gravity);
+				if(exp_time > 0.)
+					Explode->SetUniformVariable("uTime", exp_time);
+				else
+					Explode->SetUniformVariable("uTime", exp_time2);
+				Explode->SetUniformVariable("uVelScale", exp_velscale);
+				glTranslatef(lightposx, lightposy, lightposz);
+				OsuSphere(.33, 30, 30);
+				Explode->Use(0);
+			glPopMatrix();
+				if(exp_time < 0.)
+				{
+					Pattern->Use();
+					Pattern->SetUniformVariable("uNumFacets", nmf);
+					Pattern->SetUniformVariable("uPower", uPower);
+					Pattern->SetUniformVariable("uTimer", Time);
+					Pattern->SetUniformVariable("uRotateSpeed", rotatespeed);
+					Pattern->SetUniformVariable("Color_Map", 10);
+					Pattern->SetUniformVariable("Normal_Map", 11);
+					glTranslatef(lightposx, lightposy, lightposz);
+					glRotatef(exp_time * 3.14159 * 2 * rotatespeed * 50, 0., 1., 0.);
+					
+					OsuSphere(.34, 30, 30);
+					Pattern->Use(0);
+				}
 		}
 	glPopMatrix();
 
-	glActiveTexture(GL_TEXTURE6);
-	glBindTexture(GL_TEXTURE_2D, Tex0);
-	glActiveTexture(GL_TEXTURE5);
-	glBindTexture(GL_TEXTURE_2D, Tex1);
+	glPushMatrix();
+		static float light1posx;
+		static float light1posy;
+		static float light1posz;
+
+		static float light1dirx;
+		static float light1diry;
+		static float light1dirz;
+		if(spawnlight1)
+		{
+			light1posx = xpos;
+			lightposy = ypos + 2;
+			lightposz = zpos;
+
+			light1dirx = xeyepos;
+			light1diry = yeyepos;
+			light1dirz = zeyepos;
+			spawnlight1 = false;
+			light1exists = true;
+		}
+	glPopMatrix();
+
+	if (exp_time < 0)
+		rotatespeed = (exp_time + 5.) / 4.;
+	else rotatespeed = 1.;
+
+	Pattern->Use();
+	Pattern->SetUniformVariable("uNumFacets", nmf);
+	Pattern->SetUniformVariable("uPower", uPower);
+	Pattern->SetUniformVariable("uTimer", Time);
+	Pattern->SetUniformVariable("uRotateSpeed", rotatespeed);
 
 	glPushMatrix();
-		Pattern->Use();
-		Pattern->SetUniformVariable("Color_Map", 6);
-		Pattern->SetUniformVariable("Normal_Map", 5);
-		Pattern->SetUniformVariable("EC_eyeposx", xeyepos);
-		Pattern->SetUniformVariable("EC_eyeposy", yeyepos);
-		Pattern->SetUniformVariable("EC_eyeposz", zeyepos);
-		glTranslatef(-5., -1., 5.);
-		glCallList( WallList );
-		Pattern->Use(0);
+		glTranslatef(-4., 0., 4.);
+		glRotatef(-45., 0., 1., 0.);
+		glScalef(0.25, 0.25, 0.25);
+		Pattern->SetUniformVariable("Color_Map", 2);
+		Pattern->SetUniformVariable("Normal_Map", 3);
+		glCallList(CowList);
 	glPopMatrix();
 
 	glPushMatrix();
-		Pattern->Use();
-		Pattern->SetUniformVariable("Color_Map", 6);
-		Pattern->SetUniformVariable("Normal_Map", 5);
-		Pattern->SetUniformVariable("EC_eyeposx", xeyepos);
-		Pattern->SetUniformVariable("EC_eyeposy", yeyepos);
-		Pattern->SetUniformVariable("EC_eyeposz", zeyepos);
-		glTranslatef(-5., -1., -5.);
-		glCallList(WallList);
-
-		Pattern->Use(0);
+	glTranslatef(4., -1., 4.);
+	glScalef(0.15, 0.15, 0.15);
+	glRotatef(-105., 0., 1., 0.);
+	Pattern->SetUniformVariable("Color_Map", 2);
+	Pattern->SetUniformVariable("Normal_Map", 3);
+		glCallList(TigerList);
 	glPopMatrix();
+	Pattern->Use(0);
 
-	glPushMatrix();
-		Pattern->Use();
+	glPushMatrix(); /* floor */
 		Pattern->SetUniformVariable("Color_Map", 6);
 		Pattern->SetUniformVariable("Normal_Map", 5);
-		Pattern->SetUniformVariable("EC_eyeposx", xeyepos);
-		Pattern->SetUniformVariable("EC_eyeposy", yeyepos);
-		Pattern->SetUniformVariable("EC_eyeposz", zeyepos);
-		glTranslatef(-5., -1., 5.);
-		glRotatef(90, 0., 1., 0.);
-		glCallList(WallList);
-
-		Pattern->Use(0);
-	glPopMatrix();
-	glPushMatrix();
-		Pattern->Use();
-		Pattern->SetUniformVariable("Color_Map", 6);
-		Pattern->SetUniformVariable("Normal_Map", 5);
-		Pattern->SetUniformVariable("EC_eyeposx", xeyepos);
-		Pattern->SetUniformVariable("EC_eyeposy", yeyepos);
-		Pattern->SetUniformVariable("EC_eyeposz", zeyepos);
-		glTranslatef(5., -1., 5.);
-		glRotatef(90, 0., 1., 0.);
-		glCallList(WallList);
-
-		Pattern->Use(0);
-	glPopMatrix();
-	glPushMatrix();
-		Pattern->Use();
-		Pattern->SetUniformVariable("Normal_Map", 5);
-		Pattern->SetUniformVariable("Color_Map", 6);
-		Pattern->SetUniformVariable("EC_eyeposx", xeyepos);
-		Pattern->SetUniformVariable("EC_eyeposy", yeyepos);
-		Pattern->SetUniformVariable("EC_eyeposz", zeyepos);
 		glTranslatef(-5., -1., -5.);
 		glRotatef(90, 1., 0., 0.);
 		glCallList(WallList);
 
-		Pattern->Use(0);
 	glPopMatrix();
 
+		glPushMatrix(); /* walls */
+			Pattern->SetUniformVariable("Color_Map", 7);
+			Pattern->SetUniformVariable("Normal_Map", 1);
+			glTranslatef(-5., -1., 5.);
+			glCallList(WallList);
+		glPopMatrix();
+
+		glPushMatrix();
+			Pattern->SetUniformVariable("Color_Map", 7);
+			Pattern->SetUniformVariable("Normal_Map", 1);
+			glTranslatef(-5., -1., -5.);
+			glCallList(WallList);
+		glPopMatrix();
+
+		glPushMatrix();
+			Pattern->SetUniformVariable("Color_Map", 7);
+			Pattern->SetUniformVariable("Normal_Map", 1);
+			glTranslatef(-5., -1., 5.);
+			glRotatef(90, 0., 1., 0.);
+			glCallList(WallList);
+		glPopMatrix();
+
+		glPushMatrix();
+			Pattern->SetUniformVariable("Color_Map", 7);
+			Pattern->SetUniformVariable("Normal_Map", 1);
+			glTranslatef(5., -1., 5.);
+			glRotatef(90., 0., 1., 0.);
+			glCallList(WallList);
+		glPopMatrix();
+		Pattern->Use(0);
 #ifdef DEMO_Z_FIGHTING
 	if( DepthFightingOn != 0 )
 	{
@@ -963,10 +1055,21 @@ InitGraphics( )
 	height = 1024;
 	unsigned char* texarr0 = BmpToTexture("textures/concrete.bmp", &width, &height);
 	unsigned char* texarr1 = BmpToTexture("textures/concrete_normal.bmp", &width, &height);
+	unsigned char* texarr2 = BmpToTexture("textures/glyph_color.bmp", &width, &height);
+	unsigned char* texarr3 = BmpToTexture("textures/glyph_normal.bmp", &width, &height);
+	unsigned char* texarr4 = BmpToTexture("textures/wall_color.bmp", &width, &height);
+	unsigned char* texarr5 = BmpToTexture("textures/wall_normal.bmp", &width, &height);
+	unsigned char* texarrdisco = BmpToTexture("textures/disco_color.bmp", &width, &height);
+	unsigned char* texarrdisco_normal = BmpToTexture("textures/disco_normal.bmp", &width, &height);
+	
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
 	glGenTextures(1, &Tex0);
 	glGenTextures(1, &Tex1);
+	glGenTextures(1, &Tex2);
+	glGenTextures(1, &Tex3);
+	glGenTextures(1, &Tex4);
+	glGenTextures(1, &Tex5);
 
 	glBindTexture(GL_TEXTURE_2D, Tex0);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
@@ -981,6 +1084,47 @@ InitGraphics( )
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarr1);
+		glBindTexture(GL_TEXTURE_2D, Tex1);
+
+	glBindTexture(GL_TEXTURE_2D, Tex2);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarr2);
+
+	glBindTexture(GL_TEXTURE_2D, Tex3);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarr3);
+	glBindTexture(GL_TEXTURE_2D, Tex4);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarr4);
+	glBindTexture(GL_TEXTURE_2D, Tex5);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarr5);
+
+		glBindTexture(GL_TEXTURE_2D, DiscoTex);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarrdisco);
+		glBindTexture(GL_TEXTURE_2D, DiscoTexNormal);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarrdisco_normal);
+
 }
 
 
@@ -1049,17 +1193,43 @@ InitLists( )
 			glVertex3f(10., 0., 0.);
 
 				glTexCoord2f(1., 0.);
-				glNormal3f(0., 0., -1.);
 			glVertex3f(0., 0., 0.);
 
 				glTexCoord2f(1., 1.);
-				glNormal3f(0., 0., -1.);
 			glVertex3f(0., 10., 0.);
 			
 				glTexCoord2f(0., 1.);
-				glNormal3f(0., 0., -1.);
 			glVertex3f(10., 10., 0.);
 		glEnd();
+	glEndList();
+
+	FloorList = glGenLists(1);
+	glNewList(FloorList, GL_COMPILE);
+		glBegin(GL_QUADS);
+		glNormal3f(0., -1., 0.);
+		glTexCoord2f(0., 0.);
+			glVertex3f(-5., -1., -5.);	//bottom left
+		glNormal3f(0., -1., 0.);
+		glTexCoord2f(0., 1.);
+			glVertex3f(5., -1., -5.);	//bottom right
+		glNormal3f(0., -1., 0.);
+		glTexCoord2f(1., 1.);
+			glVertex3f(5., -1., 5.);	//top right
+		glNormal3f(0., -1., 0.);
+		glTexCoord2f(1., 0.);
+			glVertex3f(-5., -1., 5.);	//top left
+
+		glEnd();
+	glEndList();
+
+	CowList = glGenLists(1);
+	glNewList(CowList, GL_COMPILE);
+		LoadObjFile("objfiles/cow.obj");
+	glEndList();
+
+	TigerList = glGenLists(1);
+	glNewList(TigerList, GL_COMPILE);
+		LoadObjFile("objfiles/tigerstsM.obj");
 	glEndList();
 
 	// create the axes:
@@ -1122,6 +1292,13 @@ Keyboard( unsigned char c, int x, int y )
 				exp_time = -5.; //resetting our explode timer !
 			}
 			break;
+
+		case '1':
+			if (!light1exists)
+			{
+				spawnlight1 = true;
+				light1_time = -5.;
+			}
 
 		case 'o':
 		case 'O':
@@ -1962,4 +2139,379 @@ OsuSphere(float radius, int slices, int stacks)
 
 	delete[] Pts;
 	Pts = NULL;
+}
+
+int
+LoadObjFile(char* name)
+{
+	char* cmd;		// the command string
+	char* str;		// argument string
+
+	std::vector <struct Vertex> Vertices(10000);
+	std::vector <struct Normal> Normals(10000);
+	std::vector <struct TextureCoord> TextureCoords(10000);
+
+	Vertices.clear();
+	Normals.clear();
+	TextureCoords.clear();
+
+	struct Vertex sv;
+	struct Normal sn;
+	struct TextureCoord st;
+
+
+	// open the input file:
+
+	FILE* fp = fopen(name, "r");
+	if (fp == NULL)
+	{
+		fprintf(stderr, "Cannot open .obj file '%s'\n", name);
+		return 1;
+	}
+
+
+	float xmin = 1.e+37f;
+	float ymin = 1.e+37f;
+	float zmin = 1.e+37f;
+	float xmax = -xmin;
+	float ymax = -ymin;
+	float zmax = -zmin;
+
+	glBegin(GL_TRIANGLES);
+
+	for (; ; )
+	{
+		char* line = ReadRestOfLine(fp);
+		if (line == NULL)
+			break;
+
+
+		// skip this line if it is a comment:
+
+		if (line[0] == '#')
+			continue;
+
+
+		// skip this line if it is something we don't feel like handling today:
+
+		if (line[0] == 'g')
+			continue;
+
+		if (line[0] == 'm')
+			continue;
+
+		if (line[0] == 's')
+			continue;
+
+		if (line[0] == 'u')
+			continue;
+
+
+		// get the command string:
+
+		cmd = strtok(line, OBJDELIMS);
+
+
+		// skip this line if it is empty:
+
+		if (cmd == NULL)
+			continue;
+
+
+		if (strcmp(cmd, "v") == 0)
+		{
+			str = strtok(NULL, OBJDELIMS);
+			sv.x = atof(str);
+
+			str = strtok(NULL, OBJDELIMS);
+			sv.y = atof(str);
+
+			str = strtok(NULL, OBJDELIMS);
+			sv.z = atof(str);
+
+			Vertices.push_back(sv);
+
+			if (sv.x < xmin)	xmin = sv.x;
+			if (sv.x > xmax)	xmax = sv.x;
+			if (sv.y < ymin)	ymin = sv.y;
+			if (sv.y > ymax)	ymax = sv.y;
+			if (sv.z < zmin)	zmin = sv.z;
+			if (sv.z > zmax)	zmax = sv.z;
+
+			continue;
+		}
+
+
+		if (strcmp(cmd, "vn") == 0)
+		{
+			str = strtok(NULL, OBJDELIMS);
+			sn.nx = atof(str);
+
+			str = strtok(NULL, OBJDELIMS);
+			sn.ny = atof(str);
+
+			str = strtok(NULL, OBJDELIMS);
+			sn.nz = atof(str);
+
+			Normals.push_back(sn);
+
+			continue;
+		}
+
+
+		if (strcmp(cmd, "vt") == 0)
+		{
+			st.s = st.t = st.p = 0.;
+
+			str = strtok(NULL, OBJDELIMS);
+			st.s = atof(str);
+
+			str = strtok(NULL, OBJDELIMS);
+			if (str != NULL)
+				st.t = atof(str);
+
+			str = strtok(NULL, OBJDELIMS);
+			if (str != NULL)
+				st.p = atof(str);
+
+			TextureCoords.push_back(st);
+
+			continue;
+		}
+
+
+		if (strcmp(cmd, "f") == 0)
+		{
+			struct face vertices[10];
+			for (int i = 0; i < 10; i++)
+			{
+				vertices[i].v = 0;
+				vertices[i].n = 0;
+				vertices[i].t = 0;
+			}
+
+			int sizev = (int)Vertices.size();
+			int sizen = (int)Normals.size();
+			int sizet = (int)TextureCoords.size();
+
+			int numVertices = 0;
+			bool valid = true;
+			int vtx = 0;
+			char* str;
+			while ((str = strtok(NULL, OBJDELIMS)) != NULL)
+			{
+				int v, n, t;
+				ReadObjVTN(str, &v, &t, &n);
+
+				// if v, n, or t are negative, they are wrt the end of their respective list:
+
+				if (v < 0)
+					v += (sizev + 1);
+
+				if (n < 0)
+					n += (sizen + 1);
+
+				if (t < 0)
+					t += (sizet + 1);
+
+
+				// be sure we are not out-of-bounds (<vector> will abort):
+
+				if (t > sizet)
+				{
+					if (t != 0)
+						fprintf(stderr, "Read texture coord %d, but only have %d so far\n", t, sizet);
+					t = 0;
+				}
+
+				if (n > sizen)
+				{
+					if (n != 0)
+						fprintf(stderr, "Read normal %d, but only have %d so far\n", n, sizen);
+					n = 0;
+				}
+
+				if (v > sizev)
+				{
+					if (v != 0)
+						fprintf(stderr, "Read vertex coord %d, but only have %d so far\n", v, sizev);
+					v = 0;
+					valid = false;
+				}
+
+				vertices[vtx].v = v;
+				vertices[vtx].n = n;
+				vertices[vtx].t = t;
+				vtx++;
+
+				if (vtx >= 10)
+					break;
+
+				numVertices++;
+			}
+
+
+			// if vertices are invalid, don't draw anything this time:
+
+			if (!valid)
+				continue;
+
+			if (numVertices < 3)
+				continue;
+
+
+			// list the vertices:
+
+			int numTriangles = numVertices - 2;
+
+			for (int it = 0; it < numTriangles; it++)
+			{
+				int vv[3];
+				vv[0] = 0;
+				vv[1] = it + 1;
+				vv[2] = it + 2;
+
+				// get the planar normal, in case vertex normals are not defined:
+
+				struct Vertex* v0 = &Vertices[vertices[vv[0]].v - 1];
+				struct Vertex* v1 = &Vertices[vertices[vv[1]].v - 1];
+				struct Vertex* v2 = &Vertices[vertices[vv[2]].v - 1];
+
+				float v01[3], v02[3], norm[3];
+				v01[0] = v1->x - v0->x;
+				v01[1] = v1->y - v0->y;
+				v01[2] = v1->z - v0->z;
+				v02[0] = v2->x - v0->x;
+				v02[1] = v2->y - v0->y;
+				v02[2] = v2->z - v0->z;
+				Cross(v01, v02, norm);
+				Unit(norm, norm);
+				glNormal3fv(norm);
+
+				for (int vtx = 0; vtx < 3; vtx++)
+				{
+					if (vertices[vv[vtx]].t != 0)
+					{
+						struct TextureCoord* tp = &TextureCoords[vertices[vv[vtx]].t - 1];
+						glTexCoord2f(tp->s, tp->t);
+					}
+
+					if (vertices[vv[vtx]].n != 0)
+					{
+						struct Normal* np = &Normals[vertices[vv[vtx]].n - 1];
+						glNormal3f(np->nx, np->ny, np->nz);
+					}
+
+					struct Vertex* vp = &Vertices[vertices[vv[vtx]].v - 1];
+					glVertex3f(vp->x, vp->y, vp->z);
+				}
+			}
+			continue;
+		}
+
+
+		if (strcmp(cmd, "s") == 0)
+		{
+			continue;
+		}
+
+	}
+
+	glEnd();
+	fclose(fp);
+
+	fprintf(stderr, "Obj file range: [%8.3f,%8.3f,%8.3f] -> [%8.3f,%8.3f,%8.3f]\n",
+		xmin, ymin, zmin, xmax, ymax, zmax);
+	fprintf(stderr, "Obj file center = (%8.3f,%8.3f,%8.3f)\n",
+		(xmin + xmax) / 2., (ymin + ymax) / 2., (zmin + zmax) / 2.);
+	fprintf(stderr, "Obj file  span = (%8.3f,%8.3f,%8.3f)\n",
+		xmax - xmin, ymax - ymin, zmax - zmin);
+
+	return 0;
+}
+
+float
+Unit(float v[3])
+{
+	float dist;
+
+	dist = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+
+	if (dist > 0.0)
+	{
+		dist = sqrt(dist);
+		v[0] /= dist;
+		v[1] /= dist;
+		v[2] /= dist;
+	}
+
+	return dist;
+}
+
+
+char*
+ReadRestOfLine(FILE* fp)
+{
+	static char* line;
+	std::vector<char> tmp(1000);
+	tmp.clear();
+
+	for (; ; )
+	{
+		int c = getc(fp);
+
+		if (c == EOF && tmp.size() == 0)
+		{
+			return NULL;
+		}
+
+		if (c == EOF || c == '\n')
+		{
+			delete[] line;
+			line = new char[tmp.size() + 1];
+			for (int i = 0; i < (int)tmp.size(); i++)
+			{
+				line[i] = tmp[i];
+			}
+			line[tmp.size()] = '\0';	// terminating null
+			return line;
+		}
+		else
+		{
+			tmp.push_back(c);
+		}
+	}
+
+	return "";
+}
+
+
+void
+ReadObjVTN(char* str, int* v, int* t, int* n)
+{
+	// can be one of v, v//n, v/t, v/t/n:
+
+	if (strstr(str, "//"))				// v//n
+	{
+		*t = 0;
+		sscanf(str, "%d//%d", v, n);
+		return;
+	}
+	else if (sscanf(str, "%d/%d/%d", v, t, n) == 3)	// v/t/n
+	{
+		return;
+	}
+	else
+	{
+		*n = 0;
+		if (sscanf(str, "%d/%d", v, t) == 2)		// v/t
+		{
+			return;
+		}
+		else						// v
+		{
+			*n = *t = 0;
+			sscanf(str, "%d", v);
+		}
+	}
 }
