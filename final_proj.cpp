@@ -196,6 +196,8 @@ GLuint	FloorList;
 
 GLuint	CowList;
 GLuint	TigerList;
+GLuint	SkeleList;
+
 int		DebugOn;				// != 0 means to print debugging info
 int		DepthCueOn;				// != 0 means to use intensity depth cueing
 int		DepthBufferOn;			// != 0 means to use the z-buffer
@@ -229,6 +231,8 @@ float light1_time;
 GLSLProgram *Pattern;
 	GLuint Tex0, Tex1, Tex2, Tex3, Tex4, Tex5; /* Color & normal textures */
 	GLuint DiscoTex, DiscoTexNormal; /*Disco ball tex*/
+	GLuint BoneTex, BoneTexNormal; /* Bone Texture */
+	GLuint NoiseTex; /* Noise */
 	int width, height;
 
 GLSLProgram *Explode;
@@ -242,6 +246,13 @@ GLSLProgram *Explode;
 /* osusphere */
 int		NumLngs, NumLats;
 struct point* Pts;
+
+/* Quitting sequence */
+GLSLProgram* EdgeNoise;
+int quitGame = 0;
+float magtol = 0.5;
+float noisemag = 0.;
+float noisefreq = 0.03;
 
 // function prototypes:
 void	Animate( );
@@ -281,6 +292,7 @@ float			Unit(float [3], float [3]);
 
 void OsuSphere(float, int, int);
 
+/* Obj file stuffs */
 void	Cross(float[3], float[3], float[3]);
 char*	ReadRestOfLine(FILE*);
 void	ReadObjVTN(char*, int*, int*, int*);
@@ -288,6 +300,8 @@ float	Unit(float[3]);
 float	Unit(float[3], float[3]);
 int		LoadObjFile(char*);
 
+/* Loading noise */
+unsigned char* ReadTexture3D(char*, int*, int*, int*);
 
 // main program:
 int
@@ -354,6 +368,12 @@ Animate( )
 
 	if(light1exists)
 		light1_time += 0.001;
+
+	//if(quitGame = 1)
+	//{
+	//	magtol += 0.001;
+	//	noisemag += 0.001;
+	//}
 	glutSetWindow( MainWindow );
 	glutPostRedisplay( );
 }
@@ -392,7 +412,8 @@ Display( )
 	// given as DISTANCES IN FRONT OF THE EYE
 	// USE gluOrtho2D( ) IF YOU ARE DOING 2D !
 
-	float temp = 1.777777777777777777778;
+	float temp = 1.777777777777777777778; /* secretely, this is not a temp var... shh.....*/
+											/* (this variable is used the set the aspect ration (1.78 ~= 16/9))*/
 
 	glMatrixMode( GL_PROJECTION );
 	glLoadIdentity( );
@@ -542,151 +563,293 @@ Display( )
 
 	glActiveTexture(GL_TEXTURE10);
 	glBindTexture(GL_TEXTURE_2D, DiscoTex);
+
 	glActiveTexture(GL_TEXTURE11);
 	glBindTexture(GL_TEXTURE_2D, DiscoTexNormal);
 
-	int nmf = 0;
-	if (lightexists)
-		nmf = 30;
-	else nmf = 0;
+	glActiveTexture(GL_TEXTURE12);
+	glBindTexture(GL_TEXTURE_2D, BoneTex);
+	glActiveTexture(GL_TEXTURE13);
+	glBindTexture(GL_TEXTURE_2D, BoneTexNormal);
 
-	float uPower = 5000.;
+	glActiveTexture(GL_TEXTURE14);
+	glBindTexture(GL_TEXTURE_2D, NoiseTex);
 
-	glPushMatrix();
-		static float lightposx;
-		static float lightposy;
-		static float lightposz;
-		if(spawnlight)
-		{
-			lightposx = xpos;
-			lightposy = ypos + 2;
-			lightposz = zpos;
-			spawnlight = false;
-			lightexists = true;
-		}
-		if(lightexists)
-		{
-			glPushMatrix();
-				Explode->Use();	
-				Explode->SetUniformVariable("uLevel", exp_level);
-				Explode->SetUniformVariable("uGravity", exp_gravity);
-				if(exp_time > 0.)
-					Explode->SetUniformVariable("uTime", exp_time);
-				else
-					Explode->SetUniformVariable("uTime", exp_time2);
-				Explode->SetUniformVariable("uVelScale", exp_velscale);
-				glTranslatef(lightposx, lightposy, lightposz);
-				OsuSphere(.33, 30, 30);
-				Explode->Use(0);
-			glPopMatrix();
-				if(exp_time < 0.)
-				{
-					Pattern->Use();
-					Pattern->SetUniformVariable("uNumFacets", nmf);
-					Pattern->SetUniformVariable("uPower", uPower);
-					Pattern->SetUniformVariable("uTimer", Time);
-					Pattern->SetUniformVariable("uRotateSpeed", rotatespeed);
-					Pattern->SetUniformVariable("Color_Map", 10);
-					Pattern->SetUniformVariable("Normal_Map", 11);
+	if(quitGame == 0)
+	{
+		int nmf = 0;
+		if (lightexists)
+			nmf = 30;
+		else nmf = 0;
+
+		float uPower = 5000.;
+
+		glPushMatrix();
+			static float lightposx;
+			static float lightposy;
+			static float lightposz;
+			if(spawnlight)
+			{
+				lightposx = xpos;
+				lightposy = ypos + 2;
+				lightposz = zpos;
+				spawnlight = false;
+				lightexists = true;
+			}
+			if(lightexists)
+			{
+				glPushMatrix();
+					Explode->Use();	
+					Explode->SetUniformVariable("uLevel", exp_level);
+					Explode->SetUniformVariable("uGravity", exp_gravity);
+					if(exp_time > 0.)
+						Explode->SetUniformVariable("uTime", exp_time);
+					else
+						Explode->SetUniformVariable("uTime", exp_time2);
+					Explode->SetUniformVariable("uVelScale", exp_velscale);
 					glTranslatef(lightposx, lightposy, lightposz);
-					glRotatef(exp_time * 3.14159 * 2 * rotatespeed * 50, 0., 1., 0.);
+					OsuSphere(.33, 30, 30);
+					Explode->Use(0);
+				glPopMatrix();
+					if(exp_time < 0.)
+					{
+						Pattern->Use();
+						Pattern->SetUniformVariable("uNumFacets", nmf);
+						Pattern->SetUniformVariable("uPower", uPower);
+						Pattern->SetUniformVariable("uTimer", Time);
+						Pattern->SetUniformVariable("uRotateSpeed", rotatespeed);
+						Pattern->SetUniformVariable("Color_Map", 10);
+						Pattern->SetUniformVariable("Normal_Map", 11);
+						glTranslatef(lightposx, lightposy, lightposz);
+						glRotatef(exp_time * 3.14159 * 2 * rotatespeed * 50, 0., 1., 0.);
 					
-					OsuSphere(.34, 30, 30);
-					Pattern->Use(0);
-				}
-		}
-	glPopMatrix();
+						OsuSphere(.34, 30, 30);
+						Pattern->Use(0);
+					}
+			}
+		glPopMatrix();
 
-	glPushMatrix();
-		static float light1posx;
-		static float light1posy;
-		static float light1posz;
+		glPushMatrix();
+			static float light1posx;
+			static float light1posy;
+			static float light1posz;
 
-		static float light1dirx;
-		static float light1diry;
-		static float light1dirz;
-		if(spawnlight1)
-		{
-			light1posx = xpos;
-			lightposy = ypos + 2;
-			lightposz = zpos;
+			static float light1dirx;
+			static float light1diry;
+			static float light1dirz;
+			if(spawnlight1)
+			{
+				light1posx = xpos;
+				lightposy = ypos + 2;
+				lightposz = zpos;
 
-			light1dirx = xeyepos;
-			light1diry = yeyepos;
-			light1dirz = zeyepos;
-			spawnlight1 = false;
-			light1exists = true;
-		}
-	glPopMatrix();
+				light1dirx = xeyepos;
+				light1diry = yeyepos;
+				light1dirz = zeyepos;
+				spawnlight1 = false;
+				light1exists = true;
+			}
+		glPopMatrix();
 
-	if (exp_time < 0)
-		rotatespeed = (exp_time + 5.) / 4.;
-	else rotatespeed = 1.;
+		if (exp_time < 0)
+			rotatespeed = (exp_time + 5.) / 4.;
+		else rotatespeed = 1.;
 
-	Pattern->Use();
-	Pattern->SetUniformVariable("uNumFacets", nmf);
-	Pattern->SetUniformVariable("uPower", uPower);
-	Pattern->SetUniformVariable("uTimer", Time);
-	Pattern->SetUniformVariable("uRotateSpeed", rotatespeed);
+		Pattern->Use();
+		Pattern->SetUniformVariable("uNumFacets", nmf);
+		Pattern->SetUniformVariable("uPower", uPower);
+		Pattern->SetUniformVariable("uTimer", Time);
+		Pattern->SetUniformVariable("uRotateSpeed", rotatespeed);
 
-	glPushMatrix();
-		glTranslatef(-4., 0., 4.);
-		glRotatef(-45., 0., 1., 0.);
-		glScalef(0.25, 0.25, 0.25);
+		glPushMatrix();
+			glTranslatef(-4., 0., 4.);
+			glRotatef(-45., 0., 1., 0.);
+			glScalef(0.25, 0.25, 0.25);
+			Pattern->SetUniformVariable("Color_Map", 2);
+			Pattern->SetUniformVariable("Normal_Map", 3);
+			glCallList(CowList);
+		glPopMatrix();
+
+		glPushMatrix();
+			Pattern->SetUniformVariable("Color_Map", 12);
+			Pattern->SetUniformVariable("Normal_Map", 12);
+			glTranslatef(4.5, -0.25, 0.);
+			glScalef(0.25, 0.25, 0.25);
+			glRotatef(-90., 1., 0., 0.);
+			glCallList(SkeleList);
+		glPopMatrix();
+
+		/* Building skeleton a place to sit...*/
+		glPushMatrix(); /* walls */
 		Pattern->SetUniformVariable("Color_Map", 2);
 		Pattern->SetUniformVariable("Normal_Map", 3);
-		glCallList(CowList);
-	glPopMatrix();
+		glTranslatef(4., -0.5, .67);
+		glScalef(0.25, 1., 0.375);
+		glRotatef(-90., 1., 0., 0.);
+		glCallList(WallList);
+		glPopMatrix();
+		glPushMatrix(); /* walls */
+		Pattern->SetUniformVariable("Color_Map", 2);
+		Pattern->SetUniformVariable("Normal_Map", 3);
+		glTranslatef(4., -10.5, .67);
+		glScalef(0.25, 1., 0.375);
+		glRotatef(90., 0., 1., 0.);
+		glCallList(WallList);
+		glPopMatrix();
 
-	glPushMatrix();
-	glTranslatef(4., -1., 4.);
-	glScalef(0.15, 0.15, 0.15);
-	glRotatef(-105., 0., 1., 0.);
-	Pattern->SetUniformVariable("Color_Map", 2);
-	Pattern->SetUniformVariable("Normal_Map", 3);
-		glCallList(TigerList);
-	glPopMatrix();
-	Pattern->Use(0);
+		glPushMatrix();
+			glTranslatef(4., -1., 4.);
+			glScalef(0.15, 0.15, 0.15);
+			glRotatef(-105., 0., 1., 0.);
+			Pattern->SetUniformVariable("Color_Map", 2);
+			Pattern->SetUniformVariable("Normal_Map", 3);
+				glCallList(TigerList);
+		glPopMatrix();
 
-	glPushMatrix(); /* floor */
-		Pattern->SetUniformVariable("Color_Map", 6);
-		Pattern->SetUniformVariable("Normal_Map", 5);
-		glTranslatef(-5., -1., -5.);
-		glRotatef(90, 1., 0., 0.);
+		glPushMatrix(); /* floor */
+			Pattern->SetUniformVariable("Color_Map", 6);
+			Pattern->SetUniformVariable("Normal_Map", 5);
+			glTranslatef(-5., -1., -5.);
+			glRotatef(90, 1., 0., 0.);
+			glCallList(WallList);
+
+		glPopMatrix();
+
+		glPushMatrix(); /* ceiling */
+		Pattern->SetUniformVariable("Color_Map", 2);
+		Pattern->SetUniformVariable("Normal_Map", 3);
+		glRotatef(-90, 1., 0., 0.);
+		glTranslatef(-5., -5., 9.);
 		glCallList(WallList);
 
-	glPopMatrix();
+		glPopMatrix();
+
+			glPushMatrix(); /* walls */
+				Pattern->SetUniformVariable("Color_Map", 7);
+				Pattern->SetUniformVariable("Normal_Map", 1);
+				glTranslatef(-5., -1., 5.);
+				glCallList(WallList);
+			glPopMatrix();
+
+			glPushMatrix();
+				Pattern->SetUniformVariable("Color_Map", 7);
+				Pattern->SetUniformVariable("Normal_Map", 1);
+				glTranslatef(-5., -1., -5.);
+				glCallList(WallList);
+			glPopMatrix();
+
+			glPushMatrix();
+				Pattern->SetUniformVariable("Color_Map", 7);
+				Pattern->SetUniformVariable("Normal_Map", 1);
+				glTranslatef(-5., -1., 5.);
+				glRotatef(90, 0., 1., 0.);
+				glCallList(WallList);
+			glPopMatrix();
+
+			glPushMatrix();
+				Pattern->SetUniformVariable("Color_Map", 7);
+				Pattern->SetUniformVariable("Normal_Map", 1);
+				glTranslatef(5., -1., 5.);
+				glRotatef(90., 0., 1., 0.);
+				glCallList(WallList);
+			glPopMatrix();
+	Pattern->Use(0);
+	}
+	else
+	{
+		//if(magtol < 0.75)
+			magtol += 0.00025;
+		//else
+		//	magtol += 0.0001;
+		EdgeNoise->Use();
+		EdgeNoise->SetUniformVariable("Noise3", 13);
+		EdgeNoise->SetUniformVariable("uMagTol", magtol);
+		EdgeNoise->SetUniformVariable("uNoiseMag", noisemag);
+		EdgeNoise->SetUniformVariable("uNoiseFreq", noisefreq);
+		glPushMatrix();
+			glTranslatef(-4., 0., 4.);
+			glRotatef(-45., 0., 1., 0.);
+			glScalef(0.25, 0.25, 0.25);
+			EdgeNoise->SetUniformVariable("uColorUnit", 2);
+			glCallList(CowList);
+		glPopMatrix();
+
+		glPushMatrix();
+		EdgeNoise->SetUniformVariable("uColorUnit", 12);
+			glTranslatef(4.5, -0.25, 0.);
+			glScalef(0.25, 0.25, 0.25);
+			glRotatef(-90., 1., 0., 0.);
+			glCallList(SkeleList);
+		glPopMatrix();
+
+		/* Building skeleton a place to sit...*/
+		glPushMatrix(); /* walls */
+			EdgeNoise->SetUniformVariable("uColorUnit", 2);
+			glTranslatef(4., -0.5, .67);
+			glScalef(0.25, 1., 0.375);
+			glRotatef(-90., 1., 0., 0.);
+			glCallList(WallList);
+		glPopMatrix();
 
 		glPushMatrix(); /* walls */
-			Pattern->SetUniformVariable("Color_Map", 7);
-			Pattern->SetUniformVariable("Normal_Map", 1);
+			EdgeNoise->SetUniformVariable("uColorUnit", 2);
+			glTranslatef(4., -10.5, .67);
+			glScalef(0.25, 1., 0.375);
+			glRotatef(90., 0., 1., 0.);
+			glCallList(WallList);
+		glPopMatrix();
+
+		glPushMatrix();
+			glTranslatef(4., -1., 4.);
+			glScalef(0.15, 0.15, 0.15);
+			glRotatef(-105., 0., 1., 0.);
+			EdgeNoise->SetUniformVariable("uColorUnit", 2);
+			glCallList(TigerList);
+		glPopMatrix();
+
+		glPushMatrix(); /* floor */
+			EdgeNoise->SetUniformVariable("uColorUnit", 6);
+			glTranslatef(-5., -1., -5.);
+			glRotatef(90, 1., 0., 0.);
+		glCallList(WallList);
+
+		glPopMatrix();
+
+		glPushMatrix(); /* ceiling */
+			EdgeNoise->SetUniformVariable("uColorUnit", 2);
+			glRotatef(-90, 1., 0., 0.);
+			glTranslatef(-5., -5., 9.);
+		glCallList(WallList);
+
+		glPopMatrix();
+
+		glPushMatrix(); /* walls */
+			EdgeNoise->SetUniformVariable("uColorUnit", 7);
 			glTranslatef(-5., -1., 5.);
 			glCallList(WallList);
 		glPopMatrix();
 
 		glPushMatrix();
-			Pattern->SetUniformVariable("Color_Map", 7);
-			Pattern->SetUniformVariable("Normal_Map", 1);
+			EdgeNoise->SetUniformVariable("uColorUnit", 7);
 			glTranslatef(-5., -1., -5.);
 			glCallList(WallList);
 		glPopMatrix();
 
 		glPushMatrix();
-			Pattern->SetUniformVariable("Color_Map", 7);
-			Pattern->SetUniformVariable("Normal_Map", 1);
+			EdgeNoise->SetUniformVariable("uColorUnit", 7);
 			glTranslatef(-5., -1., 5.);
 			glRotatef(90, 0., 1., 0.);
 			glCallList(WallList);
 		glPopMatrix();
 
 		glPushMatrix();
-			Pattern->SetUniformVariable("Color_Map", 7);
-			Pattern->SetUniformVariable("Normal_Map", 1);
+			EdgeNoise->SetUniformVariable("uColorUnit", 7);
 			glTranslatef(5., -1., 5.);
 			glRotatef(90., 0., 1., 0.);
 			glCallList(WallList);
 		glPopMatrix();
-		Pattern->Use(0);
+		EdgeNoise->Use(0);
+	}
 #ifdef DEMO_Z_FIGHTING
 	if( DepthFightingOn != 0 )
 	{
@@ -730,6 +893,7 @@ Display( )
 	// note: be sure to use glFlush( ) here, not glFinish( ) !
 
 	glFlush( );
+
 }
 
 
@@ -940,6 +1104,7 @@ InitMenus( )
 void
 InitGraphics( )
 {
+	quitGame = 0;
 	//setting position/lookat variables
 	xpos, ypos, zpos = 0;
 	xeyepos, eyetheta, eyetheta_y = 0;
@@ -1049,18 +1214,50 @@ InitGraphics( )
 		fprintf(stderr, "Shader created.\n");
 	}
 	Explode->SetVerbose(false);
+	EdgeNoise = new GLSLProgram();
+	valid = EdgeNoise->Create("shaders/edges.vert", "shaders/edges.frag");
+	if (!valid)
+	{
+		fprintf(stderr, "EdgeNoise Shader cannot be created!\n");
+		DoMainMenu(QUIT);
+	}
+	else
+		fprintf(stderr, "EdgeNoise Shader created :D!\n");
+	EdgeNoise->SetVerbose(false);
+
+	/* Noise texture */
+	glGenTextures(1, &NoiseTex);
+	int nums, numt, nump;
+	unsigned char* noisetexarr = ReadTexture3D("textures/noise3d.064.tex", &nums, &numt, &nump);
+	if(noisetexarr==NULL)
+	{
+		fprintf(stderr, "Noise texture failed to open!\n");
+		DoMainMenu(QUIT);
+	}
+
+	glBindTexture(GL_TEXTURE_3D, NoiseTex); 
+	glTexParameterf(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_REPEAT); 
+	glTexParameterf(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_REPEAT); 
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_REPEAT); 
+	glTexParameterf(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); 
+	glTexParameterf(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
+	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8, nums, numt, nump, 0, GL_RGBA, GL_UNSIGNED_BYTE, noisetexarr);
+
 
 	/* Setup textures AFTER init'ing glew: */
 	width = 1024;
 	height = 1024;
-	unsigned char* texarr0 = BmpToTexture("textures/concrete.bmp", &width, &height);
-	unsigned char* texarr1 = BmpToTexture("textures/concrete_normal.bmp", &width, &height);
+	int widthbone = 768;
+	unsigned char* texarr0 = BmpToTexture("textures/ground.bmp", &width, &height);
+	unsigned char* texarr1 = BmpToTexture("textures/ground_normal.bmp", &width, &height);
 	unsigned char* texarr2 = BmpToTexture("textures/glyph_color.bmp", &width, &height);
 	unsigned char* texarr3 = BmpToTexture("textures/glyph_normal.bmp", &width, &height);
-	unsigned char* texarr4 = BmpToTexture("textures/wall_color.bmp", &width, &height);
-	unsigned char* texarr5 = BmpToTexture("textures/wall_normal.bmp", &width, &height);
+	unsigned char* texarr4 = BmpToTexture("textures/wall_color.bmp", &width, &width);
+	unsigned char* texarr5 = BmpToTexture("textures/wall_normal.bmp", &width, &width);
 	unsigned char* texarrdisco = BmpToTexture("textures/disco_color.bmp", &width, &height);
 	unsigned char* texarrdisco_normal = BmpToTexture("textures/disco_normal.bmp", &width, &height);
+	unsigned char* texarrbone = BmpToTexture("textures/bone_color.bmp", &widthbone, &widthbone);
+	unsigned char* texarrbone_normal = BmpToTexture("textures/bone_normal.bmp", &widthbone, &widthbone);
 	
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
@@ -1070,6 +1267,10 @@ InitGraphics( )
 	glGenTextures(1, &Tex3);
 	glGenTextures(1, &Tex4);
 	glGenTextures(1, &Tex5);
+	glGenTextures(1, &DiscoTex);
+	glGenTextures(1, &DiscoTexNormal);
+	glGenTextures(1, &BoneTex);
+	glGenTextures(1, &BoneTexNormal);
 
 	glBindTexture(GL_TEXTURE_2D, Tex0);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
@@ -1124,6 +1325,19 @@ InitGraphics( )
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarrdisco_normal);
+
+		glBindTexture(GL_TEXTURE_2D, BoneTex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, widthbone, widthbone, 0, GL_RGB, GL_UNSIGNED_BYTE, texarrbone);
+		glBindTexture(GL_TEXTURE_2D, BoneTexNormal);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, widthbone, widthbone, 0, GL_RGB, GL_UNSIGNED_BYTE, texarrbone_normal);
 
 }
 
@@ -1232,6 +1446,11 @@ InitLists( )
 		LoadObjFile("objfiles/tigerstsM.obj");
 	glEndList();
 
+	SkeleList = glGenLists(1);
+	glNewList(SkeleList, GL_COMPILE);
+		LoadObjFile("objfiles/skeleton.obj");
+	glEndList();
+
 	// create the axes:
 
 	AxesList = glGenLists( 1 );
@@ -1299,6 +1518,7 @@ Keyboard( unsigned char c, int x, int y )
 				spawnlight1 = true;
 				light1_time = -5.;
 			}
+			break;
 
 		case 'o':
 		case 'O':
@@ -1312,6 +1532,8 @@ Keyboard( unsigned char c, int x, int y )
 
 		case 'q':
 		case 'Q':
+			quitGame = 1;
+			break;
 		case ESCAPE:
 			DoMainMenu( QUIT );	// will not return here
 			break;				// happy compiler
@@ -1380,6 +1602,7 @@ KeyboardUp(unsigned char c, int x, int y)
 		case ESCAPE:
 			DoMainMenu(QUIT);	// will not return here
 			break;				// happy compiler
+
 
 		default:
 			fprintf(stderr, "Don't know what to do with keyboard hit: '%c' (0x%0x)\n", c, c);
@@ -2514,4 +2737,25 @@ ReadObjVTN(char* str, int* v, int* t, int* n)
 			sscanf(str, "%d", v);
 		}
 	}
+}
+
+unsigned char* ReadTexture3D(char* filename, int* width, int* height, int* depth) 
+{ 
+	FILE* fp = fopen(filename, "rb"); 
+	if (fp == NULL)
+		return NULL; 
+
+	int nums, numt, nump; 
+	fread(&nums, 4, 1, fp); 
+	fread(&numt, 4, 1, fp); 
+	fread(&nump, 4, 1, fp); 
+
+	*width = nums; 
+	*height = numt; 
+	*depth = nump; 
+
+	unsigned char* texture = new unsigned char[4 * nums * numt * nump]; 
+	fread(texture, 4 * nums * numt * nump, 1, fp); 
+	fclose(fp); 
+return texture; 
 }
