@@ -8,17 +8,25 @@ uniform int uNumFacets;
 uniform float uPower;
 uniform float uTimer;
 uniform float uRotateSpeed;
+uniform float uBallX;
+uniform float uBallY;
+uniform float uBallZ;
+uniform float uShininess;
+
+uniform bool uDrawPointLight;
+uniform float uPointLightX;
+uniform float uPointLightY;
+uniform float uPointLightZ;
+const vec3 POINTLIGHTPOS(uPointLightX, uPointLightY, uPointLightZ);
 
 const float PI = 3.14159265;
-const vec3 BALLPOS2 = vec3(0., 20., 0.);
-const vec3 LIGHTPOS2 = vec3(20., 2., 0.);
-//const vec3 LIGHTCOLOR = vec3(1., 1., 1.);
+const vec3 LIGHTPOS2 = vec3(2., 2., 0.);
 const vec3 LIGHTCOLOR = vec3(1., 0., 0.);
 
 const float uKa = .1;
 const float uKd = 1.;
 const float uKs = 1.;
-const float uShininess = 10.;
+//const float uShininess = 10.;
 const float uFreq = 1.;
 
 uniform sampler2D Color_Map;
@@ -32,6 +40,7 @@ in vec2 vST;
 
 void main( void )
 {       
+	vec3 BALLPOS2 = vec3(uBallX, uBallY, uBallZ);
 	vec3 BALLPOS = (gl_ModelViewMatrix * vec4(BALLPOS2, 1.)).xyz;
 	vec3 LIGHTPOS = (gl_ModelViewMatrix * vec4(LIGHTPOS2, 1.)).xyz;
 

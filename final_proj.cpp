@@ -194,9 +194,14 @@ GLuint	BoxList;				// object display list
 GLuint	WallList;
 GLuint	FloorList;
 
+/* .obj files */
 GLuint	CowList;
 GLuint	TigerList;
 GLuint	SkeleList;
+GLuint	VaseList;
+GLuint	CatList;
+GLuint	TeaPotList;
+GLuint	ChestList;
 
 int		DebugOn;				// != 0 means to print debugging info
 int		DepthCueOn;				// != 0 means to use intensity depth cueing
@@ -231,9 +236,14 @@ float light1_time;
 GLSLProgram *Pattern;
 	GLuint Tex0, Tex1, Tex2, Tex3, Tex4, Tex5; /* Color & normal textures */
 	GLuint DiscoTex, DiscoTexNormal; /*Disco ball tex*/
-	GLuint BoneTex, BoneTexNormal; /* Bone Texture */
-	GLuint NoiseTex; /* Noise */
+	GLuint BoneTex, BoneTexNormal; /* Bone Texture **NOTE: BoneTexNormal is actually just norm.bmp (flat blue)***/
+	GLuint NoiseTex; /* Noise (sadly not working) */
+	GLuint MarbleTex;
+	GLuint FurTex;
 	int width, height;
+	float shine1 = 10.;
+	float shine2 = 1000.;
+	float shine3 = 10000.;
 
 GLSLProgram *Explode;
 	int exp_level = 3;
@@ -573,7 +583,10 @@ Display( )
 	glBindTexture(GL_TEXTURE_2D, BoneTexNormal);
 
 	glActiveTexture(GL_TEXTURE14);
-	glBindTexture(GL_TEXTURE_2D, NoiseTex);
+	glBindTexture(GL_TEXTURE_2D, MarbleTex);
+
+	glActiveTexture(GL_TEXTURE15);
+	glBindTexture(GL_TEXTURE_2D, FurTex);
 
 	if(quitGame == 0)
 	{
@@ -640,14 +653,22 @@ Display( )
 			if(spawnlight1)
 			{
 				light1posx = xpos;
-				lightposy = ypos + 2;
-				lightposz = zpos;
+				light1posy = ypos + 2;
+				light1posz = zpos;
 
 				light1dirx = xeyepos;
 				light1diry = yeyepos;
 				light1dirz = zeyepos;
 				spawnlight1 = false;
 				light1exists = true;
+			}
+			if(light1exists)
+			{	glPushMatrix();
+				glTranslatef(light1posx, light1posy, light1posz);
+				glRotatef(exp_time * 3.14159 * 2 * rotatespeed * 50, 0., 1., 0.);
+
+				OsuSphere(.34, 30, 30);
+				glPopMatrix();
 			}
 		glPopMatrix();
 
@@ -660,17 +681,68 @@ Display( )
 		Pattern->SetUniformVariable("uPower", uPower);
 		Pattern->SetUniformVariable("uTimer", Time);
 		Pattern->SetUniformVariable("uRotateSpeed", rotatespeed);
+		Pattern->SetUniformVariable("Normal_Map", 13);
+		Pattern->SetUniformVariable("uBallX", lightposx);
+		Pattern->SetUniformVariable("uBallY", lightposy);
+		Pattern->SetUniformVariable("uBallZ", lightposz);
+		Pattern->SetUniformVariable("uShininess", shine1);
+		Pattern->SetUniformVariable("uDrawPointLight", light1exists);
+		Pattern->SetUniformVariable("uPointLightX", light1posx);
+		Pattern->SetUniformVariable("uPointLightY", light1posY);
+		Pattern->SetUniformVariable("uPointLightZ", light1posZ);
 
 		glPushMatrix();
-			glTranslatef(-4., 0., 4.);
-			glRotatef(-45., 0., 1., 0.);
+		glTranslatef(4.5, -.65, 1.);
+		glScalef(0.25, 0.25, 0.25);
+		Pattern->SetUniformVariable("uShininess", shine3);
+		Pattern->SetUniformVariable("Color_Map", 14);
+			glCallList(VaseList);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(4.5, -.65, -3.5);
+		glScalef(0.25, 0.25, 0.25);
+		Pattern->SetUniformVariable("uShininess", shine3);
+		Pattern->SetUniformVariable("Color_Map", 14);
+		glCallList(VaseList);
+		glPopMatrix();
+
+		glPushMatrix();
+			glTranslatef(-2.75, -1.5, 0.25);
+			glRotatef(45., 0., 1., 0.);
+			glCallList(TeaPotList);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(1., -1., -4.);
+		glRotatef(180., 0., 1., 0.);
+		glScalef(0.25, 0.25, 0.25);
+		Pattern->SetUniformVariable("uShininess", shine2);
+		Pattern->SetUniformVariable("Color_Map", 2);
+		Pattern->SetUniformVariable("Normal_Map", 3);
+		glCallList(ChestList);
+		glPopMatrix();
+
+		glPushMatrix();
+			glTranslatef(0., -1.15, 3.75);
+			glCallList(CatList);
+		glPopMatrix();
+
+		//***************
+		//end of new-objects
+		//***************
+		glPushMatrix();
+			glTranslatef(-4., -0., 2.);
+			glRotatef(-75., 0., 1., 0.);
 			glScalef(0.25, 0.25, 0.25);
+			Pattern->SetUniformVariable("uShininess", shine1);
 			Pattern->SetUniformVariable("Color_Map", 2);
 			Pattern->SetUniformVariable("Normal_Map", 3);
 			glCallList(CowList);
 		glPopMatrix();
 
 		glPushMatrix();
+			Pattern->SetUniformVariable("uShininess", shine1);
 			Pattern->SetUniformVariable("Color_Map", 12);
 			Pattern->SetUniformVariable("Normal_Map", 12);
 			glTranslatef(4.5, -0.25, 0.);
@@ -701,11 +773,12 @@ Display( )
 			glTranslatef(4., -1., 4.);
 			glScalef(0.15, 0.15, 0.15);
 			glRotatef(-105., 0., 1., 0.);
-			Pattern->SetUniformVariable("Color_Map", 2);
-			Pattern->SetUniformVariable("Normal_Map", 3);
+			Pattern->SetUniformVariable("uShininess", shine3);
+			Pattern->SetUniformVariable("Color_Map", 15);
+			Pattern->SetUniformVariable("Normal_Map", 13);
 				glCallList(TigerList);
 		glPopMatrix();
-
+		Pattern->SetUniformVariable("uShininess", shine1);
 		glPushMatrix(); /* floor */
 			Pattern->SetUniformVariable("Color_Map", 6);
 			Pattern->SetUniformVariable("Normal_Map", 5);
@@ -719,7 +792,7 @@ Display( )
 		Pattern->SetUniformVariable("Color_Map", 2);
 		Pattern->SetUniformVariable("Normal_Map", 3);
 		glRotatef(-90, 1., 0., 0.);
-		glTranslatef(-5., -5., 9.);
+		glTranslatef(-5., -5., 5.);
 		glCallList(WallList);
 
 		glPopMatrix();
@@ -757,19 +830,49 @@ Display( )
 	}
 	else
 	{
-		//if(magtol < 0.75)
-			magtol += 0.00025;
-		//else
-		//	magtol += 0.0001;
+		magtol += 0.00025;
 		EdgeNoise->Use();
-		EdgeNoise->SetUniformVariable("Noise3", 13);
+		EdgeNoise->SetUniformVariable("Noise3", 14);
 		EdgeNoise->SetUniformVariable("uMagTol", magtol);
 		EdgeNoise->SetUniformVariable("uNoiseMag", noisemag);
 		EdgeNoise->SetUniformVariable("uNoiseFreq", noisefreq);
+
 		glPushMatrix();
-			glTranslatef(-4., 0., 4.);
-			glRotatef(-45., 0., 1., 0.);
-			glScalef(0.25, 0.25, 0.25);
+		glTranslatef(4.5, -.65, 1.);
+		glScalef(0.25, 0.25, 0.25);
+		EdgeNoise->SetUniformVariable("uColorUnit", 14);
+		glCallList(VaseList);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(4.5, -.65, -3.5);
+		glScalef(0.25, 0.25, 0.25);
+		EdgeNoise->SetUniformVariable("uColorUnit", 14);
+		glCallList(VaseList);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(-2.75, -1.5, 0.25);
+		glRotatef(45., 0., 1., 0.);
+		glCallList(TeaPotList);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(1., -1., -4.);
+		glRotatef(180., 0., 1., 0.);
+		glScalef(0.25, 0.25, 0.25);
+		EdgeNoise->SetUniformVariable("uColorUnit", 2);
+		glCallList(ChestList);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(0., -1.15, 3.75);
+		glCallList(CatList);
+		glPopMatrix();
+		glPushMatrix();
+		glTranslatef(-4., -0., 2.);
+		glRotatef(-75., 0., 1., 0.);
+		glScalef(0.25, 0.25, 0.25);	
 			EdgeNoise->SetUniformVariable("uColorUnit", 2);
 			glCallList(CowList);
 		glPopMatrix();
@@ -803,7 +906,7 @@ Display( )
 			glTranslatef(4., -1., 4.);
 			glScalef(0.15, 0.15, 0.15);
 			glRotatef(-105., 0., 1., 0.);
-			EdgeNoise->SetUniformVariable("uColorUnit", 2);
+			EdgeNoise->SetUniformVariable("uColorUnit", 15);
 			glCallList(TigerList);
 		glPopMatrix();
 
@@ -1225,25 +1328,6 @@ InitGraphics( )
 		fprintf(stderr, "EdgeNoise Shader created :D!\n");
 	EdgeNoise->SetVerbose(false);
 
-	/* Noise texture */
-	glGenTextures(1, &NoiseTex);
-	int nums, numt, nump;
-	unsigned char* noisetexarr = ReadTexture3D("textures/noise3d.064.tex", &nums, &numt, &nump);
-	if(noisetexarr==NULL)
-	{
-		fprintf(stderr, "Noise texture failed to open!\n");
-		DoMainMenu(QUIT);
-	}
-
-	glBindTexture(GL_TEXTURE_3D, NoiseTex); 
-	glTexParameterf(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_REPEAT); 
-	glTexParameterf(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_REPEAT); 
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_REPEAT); 
-	glTexParameterf(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); 
-	glTexParameterf(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
-	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8, nums, numt, nump, 0, GL_RGBA, GL_UNSIGNED_BYTE, noisetexarr);
-
-
 	/* Setup textures AFTER init'ing glew: */
 	width = 1024;
 	height = 1024;
@@ -1257,7 +1341,9 @@ InitGraphics( )
 	unsigned char* texarrdisco = BmpToTexture("textures/disco_color.bmp", &width, &height);
 	unsigned char* texarrdisco_normal = BmpToTexture("textures/disco_normal.bmp", &width, &height);
 	unsigned char* texarrbone = BmpToTexture("textures/bone_color.bmp", &widthbone, &widthbone);
-	unsigned char* texarrbone_normal = BmpToTexture("textures/bone_normal.bmp", &widthbone, &widthbone);
+	unsigned char* texarrbone_normal = BmpToTexture("textures/norm.bmp", &width, &height);
+	unsigned char* texarr_marble = BmpToTexture("textures/marble_color.bmp", &width, &height);
+	unsigned char* texarr_fur = BmpToTexture("textures/fur.bmp", &width, &height);
 	
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
@@ -1271,6 +1357,8 @@ InitGraphics( )
 	glGenTextures(1, &DiscoTexNormal);
 	glGenTextures(1, &BoneTex);
 	glGenTextures(1, &BoneTexNormal);
+	glGenTextures(1, &MarbleTex);
+	glGenTextures(1, &FurTex);
 
 	glBindTexture(GL_TEXTURE_2D, Tex0);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
@@ -1332,15 +1420,28 @@ InitGraphics( )
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexImage2D(GL_TEXTURE_2D, 0, 3, widthbone, widthbone, 0, GL_RGB, GL_UNSIGNED_BYTE, texarrbone);
+
 		glBindTexture(GL_TEXTURE_2D, BoneTexNormal);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexImage2D(GL_TEXTURE_2D, 0, 3, widthbone, widthbone, 0, GL_RGB, GL_UNSIGNED_BYTE, texarrbone_normal);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarrbone_normal);
 
+		glBindTexture(GL_TEXTURE_2D, MarbleTex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarr_marble);		
+
+		glBindTexture(GL_TEXTURE_2D, FurTex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texarr_fur);
 }
-
 
 // initialize the display lists that will not change:
 // (a display list is a way to store opengl commands in
@@ -1436,6 +1537,7 @@ InitLists( )
 		glEnd();
 	glEndList();
 
+/*Loading obj files */
 	CowList = glGenLists(1);
 	glNewList(CowList, GL_COMPILE);
 		LoadObjFile("objfiles/cow.obj");
@@ -1449,6 +1551,26 @@ InitLists( )
 	SkeleList = glGenLists(1);
 	glNewList(SkeleList, GL_COMPILE);
 		LoadObjFile("objfiles/skeleton.obj");
+	glEndList();
+
+	CatList = glGenLists(1);
+	glNewList(CatList, GL_COMPILE);
+		LoadObjFile("objfiles/cat.obj");
+	glEndList();
+
+	VaseList = glGenLists(1);
+	glNewList(VaseList, GL_COMPILE);
+		LoadObjFile("objfiles/vase.obj");
+	glEndList();	
+
+	TeaPotList = glGenLists(1);
+	glNewList(TeaPotList, GL_COMPILE);
+		LoadObjFile("objfiles/teapot.obj");
+	glEndList();	
+
+	ChestList = glGenLists(1);
+	glNewList(ChestList, GL_COMPILE);
+		LoadObjFile("objfiles/chest.obj");
 	glEndList();
 
 	// create the axes:
