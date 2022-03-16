@@ -1,0 +1,3 @@
+chest.obj was found @: https://www.turbosquid.com/3d-models/3d-old-treasure-box-1187465#
+
+All other .obj files were taken from your (Professor Bailey's, that is) website.
