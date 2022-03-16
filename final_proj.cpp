@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <time.h>
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -67,8 +68,8 @@ const int ESCAPE = { 0x1b };
 // initial window size:
 
 const int INIT_WINDOW_SIZE = { 600 };
-const int INIT_WINDOW_WIDTH = {1920};
-const int INIT_WINDOW_HEIGHT = {1080};
+const int INIT_WINDOW_WIDTH = {1280};
+const int INIT_WINDOW_HEIGHT = {720};
 
 // size of the 3d box:
 
@@ -231,6 +232,7 @@ bool lightexists = 0;
 bool spawnlight1;
 bool light1exists;
 float light1_time;
+float pointr, pointg, pointb = 1.;
 
 /* Shaders */
 GLSLProgram *Pattern;
@@ -260,7 +262,7 @@ struct point* Pts;
 /* Quitting sequence */
 GLSLProgram* EdgeNoise;
 int quitGame = 0;
-float magtol = 0.5;
+float magtol = 0.35;
 float noisemag = 0.;
 float noisefreq = 0.03;
 
@@ -317,6 +319,8 @@ unsigned char* ReadTexture3D(char*, int*, int*, int*);
 int
 main( int argc, char *argv[ ] )
 {
+	srand(time(NULL));
+
 	// turn on the glut package:
 	// (do this before checking argc and argv since it might
 	// pull some command line arguments out)
@@ -414,7 +418,7 @@ Display( )
 
 	// set the viewport to a square centered in the window:
 
-	glutFullScreen();
+	//glutFullScreen();
 	glViewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT);
 
 	// set the viewing volume:
@@ -664,10 +668,15 @@ Display( )
 			}
 			if(light1exists)
 			{	glPushMatrix();
+				Pattern->Use();
+				Pattern->SetUniformVariable("Color_Map", 6);
+				Pattern->SetUniformVariable("uPointR", pointr);
+				Pattern->SetUniformVariable("uPointG", pointg);
+				Pattern->SetUniformVariable("uPointB", pointb);
 				glTranslatef(light1posx, light1posy, light1posz);
-				glRotatef(exp_time * 3.14159 * 2 * rotatespeed * 50, 0., 1., 0.);
-
+				glRotatef(light1_time * 3.14159 * 2 * rotatespeed * 50, 0., 1., 0.);
 				OsuSphere(.34, 30, 30);
+				Pattern->Use(0);
 				glPopMatrix();
 			}
 		glPopMatrix();
@@ -1641,7 +1650,18 @@ Keyboard( unsigned char c, int x, int y )
 				light1_time = -5.;
 			}
 			break;
-
+		case '2':
+			pointr = rand() % 2;
+			pointg = rand() % 2;
+			pointb = rand() % 2;
+			break;
+		case '3':
+			spawnlight1 = false;
+			light1exists = false;
+			pointr = 1.;
+			pointg = 1.;
+			pointb = 1.;
+			break;
 		case 'o':
 		case 'O':
 			WhichProjection = ORTHO;

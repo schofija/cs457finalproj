@@ -14,10 +14,15 @@ uniform float uBallZ;
 uniform float uShininess;
 
 uniform bool uDrawPointLight;
-uniform float uPointLightX;
-uniform float uPointLightY;
-uniform float uPointLightZ;
-const vec3 POINTLIGHTPOS(uPointLightX, uPointLightY, uPointLightZ);
+uniform float uPointR;
+uniform float uPointB;
+uniform float uPointG;
+flat in vec3 vNf;
+in vec3 vNs;
+flat in vec3 vLf;
+in vec3 vLs;
+flat in vec3 vEf;
+in vec3 vEs;
 
 const float PI = 3.14159265;
 const vec3 LIGHTPOS2 = vec3(2., 2., 0.);
@@ -40,6 +45,33 @@ in vec2 vST;
 
 void main( void )
 {       
+	vec3 pointambient;
+	vec3 pointdiffuse;
+	vec3 pointspecular;
+	
+	vec3 Normal;
+	vec3 Light;
+	vec3 Eye;
+	if(uDrawPointLight)
+	{
+		Normal = normalize(vNs);
+		Light = normalize(vLs);
+		Eye = normalize(vEs);
+		
+		float d = max(dot(Normal, Light), 0.);
+		pointdiffuse = uKd/2 * d * vec3(uPointR, uPointG, uPointB);
+		
+		float s = 0.;
+		if( dot(Normal,Light)  >  0. )// only do specular if the light can see the point
+		{
+			vec3 ref = normalize( 2. * Normal * dot(Normal,Light) - Light );
+			s = pow( max( dot(Eye,ref),0. ), uShininess );
+		}
+		
+		pointspecular = uKs * s * vec3(uPointR, uPointG, uPointB);
+	}
+	
+
 	vec3 BALLPOS2 = vec3(uBallX, uBallY, uBallZ);
 	vec3 BALLPOS = (gl_ModelViewMatrix * vec4(BALLPOS2, 1.)).xyz;
 	vec3 LIGHTPOS = (gl_ModelViewMatrix * vec4(LIGHTPOS2, 1.)).xyz;
@@ -92,5 +124,8 @@ void main( void )
 	float Specular_Intensity = pow( max( dot( reflect( -L, N ), E ), 0. ), uShininess ) * Light_Intensity;
 	vec3 Specular_Color = uKs * Specular_Intensity * vec3( 1., 1., 1. );
 	//vLightIntensity + d * lightcolor
-	gl_FragColor = vec4((vLightIntensity + d * LIGHTCOLOR * -1.)*Diffuse_Color + Ambient_Color + Specular_Color, 1. );
+	if(uDrawPointLight)
+		gl_FragColor = vec4((vLightIntensity + d * LIGHTCOLOR * -1.)*Diffuse_Color*pointdiffuse + Ambient_Color + Specular_Color + pointspecular, 1. );
+	else
+		gl_FragColor = vec4((vLightIntensity + d * LIGHTCOLOR * -1.)*Diffuse_Color + Ambient_Color + Specular_Color, 1. );
 	}

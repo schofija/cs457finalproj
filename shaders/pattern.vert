@@ -14,8 +14,32 @@ out vec2 vST;
 
 const vec3 LIGHTPOS2 = vec3(2., 2., 0.);
 
+
+uniform float uPointLightX;
+uniform float uPointLightY;
+uniform float uPointLightZ;
+vec3 eyeLightPosition = vec3(uPointLightX, uPointLightY, uPointLightZ);
+flat out vec3 vNf;
+out vec3 vNs;
+flat out vec3 vLf;
+out vec3 vLs;
+flat out vec3 vEf;
+out vec3 vEs;
 void main()
 {
+
+	/* Point light */
+	vec4 ECposition = gl_ModelViewMatrix * gl_Vertex;
+	vNf = normalize( gl_NormalMatrix* gl_Normal );
+	vNs = vNf;
+	
+	vLf = eyeLightPosition - ECposition.xyz;   // vector from the point
+	vLs = vLf; 
+	
+	vEf = vec3( 0., 0., 0. ) - ECposition.xyz;
+	vEs = vEf;
+	
+	
 	vec3 LIGHTPOS = (gl_ModelViewMatrix * vec4(LIGHTPOS2, 1.)).xyz;
 	/* Disco ball lighting */
 	vECpos = (gl_ModelViewMatrix * gl_Vertex).xyz;
