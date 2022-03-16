@@ -688,8 +688,8 @@ Display( )
 		Pattern->SetUniformVariable("uShininess", shine1);
 		Pattern->SetUniformVariable("uDrawPointLight", light1exists);
 		Pattern->SetUniformVariable("uPointLightX", light1posx);
-		Pattern->SetUniformVariable("uPointLightY", light1posY);
-		Pattern->SetUniformVariable("uPointLightZ", light1posZ);
+		Pattern->SetUniformVariable("uPointLightY", light1posy);
+		Pattern->SetUniformVariable("uPointLightZ", light1posz);
 
 		glPushMatrix();
 		glTranslatef(4.5, -.65, 1.);
